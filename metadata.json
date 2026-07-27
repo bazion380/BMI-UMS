@@ -1,0 +1,6 @@
+{
+  "name": "BMI University Management System",
+  "description": "Comprehensive University Management System featuring Student Portal and Staff Dashboard with RBAC.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

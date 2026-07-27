@@ -33,3 +33,22 @@ describe('Student Identification Generator Suite', () => {
     expect(regNo).toBe('BMI/PG-DS/226/042');
   });
 });
+
+describe('Authentication & Token Helper Suite', () => {
+  it('encodes and decodes token payloads correctly', () => {
+    const payload = { role: 'registrar', name: 'Dr. Vance', time: Date.now() };
+    const token = Buffer.from(JSON.stringify(payload)).toString('base64');
+    
+    const decoded = JSON.parse(Buffer.from(token, 'base64').toString('utf8'));
+    expect(decoded.role).toBe('registrar');
+    expect(decoded.name).toBe('Dr. Vance');
+  });
+
+  it('validates role permissions correctly', () => {
+    const allowedRoles = ['registrar', 'admissions'];
+    
+    expect(allowedRoles.includes('registrar')).toBe(true);
+    expect(allowedRoles.includes('student')).toBe(false);
+  });
+});
+

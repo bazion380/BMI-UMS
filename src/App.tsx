@@ -4,6 +4,7 @@ import { AppProvider, useApp } from './context/AppContext';
 import { Header } from './components/common/Header';
 import { AuditLogModal } from './components/common/AuditLogModal';
 import { GlobalSearchModal } from './components/common/GlobalSearchModal';
+import { LoginModal } from './components/common/LoginModal';
 import { StudentPortal } from './components/student/StudentPortal';
 import { AdminDashboard } from './components/admin/AdminDashboard';
 
@@ -11,6 +12,7 @@ const MainLayout: React.FC = () => {
   const { currentPortal, setCurrentPortal } = useApp();
   const [isAuditLogOpen, setIsAuditLogOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isLoginOpen, setIsLoginOpen] = useState(false);
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -51,6 +53,7 @@ const MainLayout: React.FC = () => {
       <Header
         onOpenAuditLog={() => setIsAuditLogOpen(true)}
         onOpenSearch={() => setIsSearchOpen(true)}
+        onOpenLogin={() => setIsLoginOpen(true)}
       />
 
       {/* Primary Client-Side Router View */}
@@ -64,6 +67,11 @@ const MainLayout: React.FC = () => {
       </main>
 
       {/* Global Modals */}
+      <LoginModal
+        isOpen={isLoginOpen}
+        onClose={() => setIsLoginOpen(false)}
+      />
+
       <AuditLogModal
         isOpen={isAuditLogOpen}
         onClose={() => setIsAuditLogOpen(false)}

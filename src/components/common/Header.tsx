@@ -18,9 +18,10 @@ import {
 interface HeaderProps {
   onOpenAuditLog: () => void;
   onOpenSearch: () => void;
+  onOpenLogin: () => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ onOpenAuditLog, onOpenSearch }) => {
+export const Header: React.FC<HeaderProps> = ({ onOpenAuditLog, onOpenSearch, onOpenLogin }) => {
   const { 
     currentPortal, 
     setCurrentPortal, 
@@ -30,7 +31,9 @@ export const Header: React.FC<HeaderProps> = ({ onOpenAuditLog, onOpenSearch }) 
     activeStudentId, 
     setActiveStudentId,
     auditLogs,
-    resetDemoData
+    resetDemoData,
+    authToken,
+    authUser
   } = useApp();
 
   const [showRoleDropdown, setShowRoleDropdown] = useState(false);
@@ -135,6 +138,22 @@ export const Header: React.FC<HeaderProps> = ({ onOpenAuditLog, onOpenSearch }) 
             >
               <Search className="w-4 h-4 text-indigo-400" />
               <span className="hidden lg:inline text-slate-400">Search... (Ctrl+K)</span>
+            </button>
+
+            {/* Security Login Trigger */}
+            <button
+              onClick={onOpenLogin}
+              className={`p-2 rounded-lg border transition flex items-center space-x-1.5 text-xs ${
+                authToken
+                  ? 'bg-emerald-950/80 hover:bg-emerald-900 border-emerald-700/60 text-emerald-300'
+                  : 'bg-indigo-950/80 hover:bg-indigo-900 border-indigo-700/60 text-indigo-300'
+              }`}
+              title={authToken ? `Authenticated as ${authUser?.name}` : 'Login & Issue JWT Token'}
+            >
+              <ShieldCheck className={`w-4 h-4 ${authToken ? 'text-emerald-400' : 'text-indigo-400'}`} />
+              <span className="hidden sm:inline font-semibold">
+                {authToken ? (authUser?.role || 'Auth Active') : 'Login'}
+              </span>
             </button>
 
             {/* Audit Trail Badge Trigger */}

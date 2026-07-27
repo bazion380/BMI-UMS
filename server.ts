@@ -448,6 +448,85 @@ app.post("/api/applications/:id/pipeline", authMiddleware, requireRoles("admissi
   });
 });
 
+// Courses API
+app.get("/api/courses", authMiddleware, (req, res) => {
+  res.json(db.courses);
+});
+
+app.post("/api/courses", authMiddleware, requireRoles("registrar", "lecturer"), (req, res) => {
+  const authReq = req as AuthenticatedRequest;
+  const course = { id: `crs-${Date.now()}`, ...req.body };
+  db.courses.push(course);
+  saveDB(db);
+  logServerAudit("Course Created", `New course created: ${course.code} - ${course.title}`, authReq.userRole, authReq.userName);
+  res.status(201).json(course);
+});
+
+app.put("/api/courses/:id", authMiddleware, (req, res) => {
+  const authReq = req as AuthenticatedRequest;
+  const index = db.courses.findIndex(c => c.id === req.params.id);
+  if (index === -1) {
+    return res.status(404).json({ error: "Course not found" });
+  }
+  db.courses[index] = { ...db.courses[index], ...req.body };
+  saveDB(db);
+  logServerAudit("Course Updated", `Course updated: ${db.courses[index].code}`, authReq.userRole, authReq.userName);
+  res.json(db.courses[index]);
+});
+
+// Invoices API
+app.get("/api/invoices", authMiddleware, (req, res) => {
+  res.json(db.invoices);
+});
+
+app.post("/api/invoices", authMiddleware, requireRoles("finance"), (req, res) => {
+  const authReq = req as AuthenticatedRequest;
+  const invoice = { id: `inv-${Date.now()}`, ...req.body };
+  db.invoices.unshift(invoice);
+  saveDB(db);
+  logServerAudit("Invoice Issued", `New invoice issued: #${invoice.invoiceNumber || invoice.id}`, authReq.userRole, authReq.userName);
+  res.status(201).json(invoice);
+});
+
+app.put("/api/invoices/:id", authMiddleware, (req, res) => {
+  const authReq = req as AuthenticatedRequest;
+  const index = db.invoices.findIndex(i => i.id === req.params.id);
+  if (index === -1) {
+    return res.status(404).json({ error: "Invoice not found" });
+  }
+  db.invoices[index] = { ...db.invoices[index], ...req.body };
+  saveDB(db);
+  logServerAudit("Invoice Updated", `Payment / Status update on Invoice #${db.invoices[index].invoiceNumber || req.params.id}`, authReq.userRole, authReq.userName);
+  res.json(db.invoices[index]);
+});
+
+// Update Application
+app.put("/api/applications/:id", authMiddleware, requireRoles("admissions", "registrar"), (req, res) => {
+  const authReq = req as AuthenticatedRequest;
+  const index = db.applications.findIndex(a => a.id === req.params.id);
+  if (index === -1) {
+    return res.status(404).json({ error: "Application not found" });
+  }
+  db.applications[index] = { ...db.applications[index], ...req.body };
+  saveDB(db);
+  logServerAudit("Application Updated", `Application #${db.applications[index].applicationNumber} updated to status '${db.applications[index].status}'`, authReq.userRole, authReq.userName);
+  res.json(db.applications[index]);
+});
+
+// Staff API
+app.get("/api/staff", authMiddleware, (req, res) => {
+  res.json(db.staff);
+});
+
+// Books & Loans API
+app.get("/api/books", authMiddleware, (req, res) => {
+  res.json(db.books);
+});
+
+app.get("/api/loans", authMiddleware, (req, res) => {
+  res.json(db.loans);
+});
+
 // Audit Logs API
 app.get("/api/audit-logs", authMiddleware, (req, res) => {
   res.json(db.auditLogs);

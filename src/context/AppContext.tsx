@@ -60,6 +60,12 @@ interface AppContextType {
   executiveApprovals: { id: number; title: string; dept: string; priority: 'High' | 'Medium' | 'Low'; signed: boolean; signedDate?: string; signerName?: string }[];
   systemFlags: { mfaRequired: boolean; maintenanceMode: boolean; autoClearHolds: boolean; openEnrollment: boolean };
 
+  // Authentication & Security
+  authToken: string | null;
+  authUser: { name: string; role: UserRole } | null;
+  setAuthToken: (token: string | null) => void;
+  setAuthUser: (user: { name: string; role: UserRole } | null) => void;
+
   // Actions
   logAudit: (action: string, details: string, severity?: 'Info' | 'Warning' | 'Security') => void;
   enrollStudentInCourse: (studentId: string, courseId: string) => { success: boolean; message: string };
@@ -132,6 +138,45 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [currentPortal, setCurrentPortalState] = useState<'student' | 'staff'>('student');
   const [activeRole, setActiveRoleState] = useState<UserRole>('student');
   const [activeStudentId, setActiveStudentId] = useState<string>('std-101');
+
+  // Authentication State
+  const [authToken, setAuthTokenState] = useState<string | null>(() => {
+    return sessionStorage.getItem('bmi_ums_auth_token');
+  });
+
+  const [authUser, setAuthUserState] = useState<{ name: string; role: UserRole } | null>(() => {
+    const saved = sessionStorage.getItem('bmi_ums_auth_user');
+    return saved ? JSON.parse(saved) : null;
+  });
+
+  const setAuthToken = (token: string | null) => {
+    setAuthTokenState(token);
+    if (token) {
+      sessionStorage.setItem('bmi_ums_auth_token', token);
+    } else {
+      sessionStorage.removeItem('bmi_ums_auth_token');
+    }
+  };
+
+  const setAuthUser = (user: { name: string; role: UserRole } | null) => {
+    setAuthUserState(user);
+    if (user) {
+      sessionStorage.setItem('bmi_ums_auth_user', JSON.stringify(user));
+    } else {
+      sessionStorage.removeItem('bmi_ums_auth_user');
+    }
+  };
+
+  const getAuthHeaders = (overrideToken?: string) => {
+    const token = overrideToken || authToken || sessionStorage.getItem('bmi_ums_auth_token');
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json'
+    };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    return headers;
+  };
 
   // Load or Initialize State
   const [students, setStudents] = useState<Student[]>(() => {
@@ -225,10 +270,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     async function syncWithServerAPI() {
       try {
-        const [stdRes, appRes, logRes] = await Promise.all([
-          fetch('/api/students').then(r => r.ok ? r.json() : null),
-          fetch('/api/applications').then(r => r.ok ? r.json() : null),
-          fetch('/api/audit-logs').then(r => r.ok ? r.json() : null),
+        const headers = getAuthHeaders();
+        const [stdRes, appRes, logRes, crsRes, invRes] = await Promise.all([
+          fetch('/api/students', { headers }).then(r => r.ok ? r.json() : null),
+          fetch('/api/applications', { headers }).then(r => r.ok ? r.json() : null),
+          fetch('/api/audit-logs', { headers }).then(r => r.ok ? r.json() : null),
+          fetch('/api/courses', { headers }).then(r => r.ok ? r.json() : null),
+          fetch('/api/invoices', { headers }).then(r => r.ok ? r.json() : null),
         ]);
 
         if (stdRes && Array.isArray(stdRes) && stdRes.length > 0) {
@@ -240,12 +288,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (logRes && Array.isArray(logRes) && logRes.length > 0) {
           setAuditLogs(logRes);
         }
+        if (crsRes && Array.isArray(crsRes) && crsRes.length > 0) {
+          setCourses(crsRes);
+        }
+        if (invRes && Array.isArray(invRes) && invRes.length > 0) {
+          setInvoices(invRes);
+        }
       } catch (err) {
         console.warn('Backend API server not reached, using persistent cached state:', err);
       }
     }
     syncWithServerAPI();
-  }, []);
+  }, [authToken]);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY_PREFIX + 'applications', JSON.stringify(applications));
@@ -334,6 +388,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       severity
     };
     setAuditLogs(prev => [newLog, ...prev]);
+
+    // Asynchronously send to server API
+    fetch('/api/audit-logs', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ action, details, severity })
+    }).catch(err => console.warn('Failed to persist audit log to server:', err));
   };
 
   // 1. Course Enrollment Validator & Handler
@@ -553,6 +614,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       `Application #${app.applicationNumber} converted! Assigned Lifetime Student UID: ${newStudent.studentUid} | Registration Number: ${newStudent.registrationNumber}`
     );
 
+    fetch(`/api/applications/${applicationId}/convert`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+    }).catch(err => console.warn('Failed to convert application on server backend:', err));
+
     return newStudent;
   };
 
@@ -667,6 +733,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       'Info'
     );
 
+    fetch(`/api/applications/${applicationId}/pipeline`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+    }).catch(err => console.warn('Failed to run pipeline on server backend:', err));
+
     return { student: newStudent, invoice: newInvoice, autoEnrolledCoursesCount: coursesToEnroll.length };
   };
 
@@ -739,6 +810,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ]
     };
     setApplications(prev => [newApp, ...prev]);
+    
+    fetch('/api/applications', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(appData)
+    }).catch(err => console.warn('Failed to persist application to server backend:', err));
+
     logAudit('Admissions CRM', `New application #${newApp.applicationNumber} received from ${newApp.applicantName} for ${newApp.programApplied}.`);
   };
 
@@ -750,6 +828,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       enrolledCount: 0
     };
     setCourses(prev => [...prev, newCourse]);
+
+    fetch('/api/courses', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(courseData)
+    }).catch(err => console.warn('Failed to persist course to server backend:', err));
+
     logAudit('Course Curriculum Creation', `Created new course ${newCourse.code} (${newCourse.title}) in ${newCourse.department}.`);
   };
 
@@ -1003,6 +1088,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         alumniList,
         executiveApprovals,
         systemFlags,
+        authToken,
+        authUser,
+        setAuthToken,
+        setAuthUser,
         logAudit,
         enrollStudentInCourse,
         dropStudentFromCourse,

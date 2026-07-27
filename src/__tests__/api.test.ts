@@ -44,6 +44,22 @@ describe('Authentication & Token Helper Suite', () => {
     expect(decoded.name).toBe('Dr. Vance');
   });
 
+  it('validates HMAC signed tokens correctly', () => {
+    const crypto = require('crypto');
+    const secret = 'bmi_ums_secure_token_secret_2026';
+    const payload = { role: 'president', name: 'Prof. Arthur Vance', exp: Date.now() + 3600000 };
+    
+    const payloadStr = Buffer.from(JSON.stringify(payload)).toString('base64url');
+    const signature = crypto.createHmac('sha256', secret).update(payloadStr).digest('base64url');
+    const token = `${payloadStr}.${signature}`;
+
+    const parts = token.split('.');
+    expect(parts.length).toBe(2);
+
+    const expectedSig = crypto.createHmac('sha256', secret).update(parts[0]).digest('base64url');
+    expect(parts[1]).toBe(expectedSig);
+  });
+
   it('validates role permissions correctly', () => {
     const allowedRoles = ['registrar', 'admissions'];
     

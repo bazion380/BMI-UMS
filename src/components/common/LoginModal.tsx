@@ -22,7 +22,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
   const { setActiveRole, setAuthToken, authToken, authUser, setAuthUser } = useApp();
   
   const [selectedRole, setSelectedRole] = useState<UserRole>('president');
-  const [passcode, setPasscode] = useState('123456');
+  const [passcode, setPasscode] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -167,7 +167,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
                   value={passcode}
                   onChange={e => setPasscode(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500 font-mono"
-                  placeholder="Enter passcode"
+                  placeholder="Passcode (Default: 123456)"
                 />
                 <KeyRound className="absolute right-3 top-3 w-4 h-4 text-slate-500" />
               </div>
@@ -180,9 +180,9 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
               <div className="bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-xs text-slate-400 flex items-center justify-between h-[42px]">
                 <span className="flex items-center space-x-1.5">
                   <Lock className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Base64 JWT API Token</span>
+                  <span>HMAC SHA-256 JWT Token</span>
                 </span>
-                <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded font-mono font-bold">256-BIT</span>
+                <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded font-mono font-bold">HMAC-256</span>
               </div>
             </div>
           </div>

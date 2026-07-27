@@ -98,7 +98,12 @@ export const Header: React.FC<HeaderProps> = ({ onOpenAuditLog, onOpenSearch, on
             </button>
 
             <button
-              onClick={() => setCurrentPortal('staff')}
+              onClick={() => {
+                setCurrentPortal('staff');
+                if (!authToken || authUser?.role === 'student') {
+                  onOpenLogin();
+                }
+              }}
               className={`flex items-center space-x-2 px-4 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                 currentPortal === 'staff'
                   ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'

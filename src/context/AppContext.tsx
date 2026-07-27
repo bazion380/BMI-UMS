@@ -342,14 +342,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [auditLogs]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY_PREFIX + 'books', JSON.stringify(libraryBooks));
-  }, [libraryBooks]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY_PREFIX + 'loans', JSON.stringify(libraryLoans));
-  }, [libraryLoans]);
-
-  useEffect(() => {
     localStorage.setItem(STORAGE_KEY_PREFIX + 'advising', JSON.stringify(advisingNotes));
   }, [advisingNotes]);
 
@@ -480,20 +472,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     paymentMethod: 'Credit Card' | 'Bank Transfer' | 'Mobile Payment' | 'Scholarship Voucher'
   ) => {
     let updatedStudentId = '';
+    let updatedPaid = 0;
+    let updatedStatus: FeeInvoice['status'] = 'Unpaid';
     
     setInvoices(prev => prev.map(inv => {
       if (inv.id === invoiceId) {
         updatedStudentId = inv.studentId;
-        const newPaid = inv.amountPaid + amountPaid;
-        const newStatus = newPaid >= inv.totalAmount ? 'Paid' : 'Partial';
+        updatedPaid = inv.amountPaid + amountPaid;
+        updatedStatus = updatedPaid >= inv.totalAmount ? 'Paid' : 'Partial';
         return {
           ...inv,
-          amountPaid: newPaid,
-          status: newStatus
+          amountPaid: updatedPaid,
+          status: updatedStatus
         };
       }
       return inv;
     }));
+
+    // Sync invoice payment with server backend API
+    fetch(`/api/invoices/${invoiceId}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ amountPaid: updatedPaid, status: updatedStatus })
+    }).catch(err => console.warn('Failed to persist invoice payment on server:', err));
 
     // Auto-check if all invoices for student are now paid -> Clear Financial Hold automatically!
     if (updatedStudentId) {
@@ -510,6 +511,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                   `Financial Hold automatically cleared for ${s.firstName} ${s.lastName} (${s.studentNumber}) following full fee invoice payment.`,
                   'Info'
                 );
+                fetch(`/api/students/${s.id}`, {
+                  method: 'PUT',
+                  headers: getAuthHeaders(),
+                  body: JSON.stringify({ financialHold: false })
+                }).catch(err => console.warn('Failed to clear student hold on server:', err));
                 return { ...s, financialHold: false };
               }
               return s;
@@ -751,6 +757,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }));
 
     // Recalculate Student GPA dynamically!
+    let updatedGpa = 0;
     setStudents(prev => prev.map(s => {
       if (s.id === studentId) {
         // Simple grade point converter
@@ -759,11 +766,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           'C+': 2.3, 'C': 2.0, 'D': 1.0, 'F': 0.0
         };
         const point = gradePoints[grade] ?? 3.0;
-        const newGpa = Number(((s.gpa * 3 + point) / 4).toFixed(2));
-        return { ...s, gpa: newGpa, cgpa: newGpa };
+        updatedGpa = Number(((s.gpa * 3 + point) / 4).toFixed(2));
+        return { ...s, gpa: updatedGpa, cgpa: updatedGpa };
       }
       return s;
     }));
+
+    fetch(`/api/students/${studentId}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ gpa: updatedGpa, cgpa: updatedGpa })
+    }).catch(err => console.warn('Failed to persist grade update on server:', err));
 
     const course = courses.find(c => c.id === courseId);
     logAudit('Grade Assigned', `Assigned grade ${grade} (${numericScore}/100) to student ${studentId} for ${course?.code || courseId}.`);
@@ -771,6 +784,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // 5. Toggle Holds (Finance / Registrar)
   const toggleStudentHold = (studentId: string, holdType: 'financial' | 'academic', value: boolean) => {
+    const updatedHold = holdType === 'financial' ? { financialHold: value } : { academicHold: value };
+
     setStudents(prev => prev.map(s => {
       if (s.id === studentId) {
         return {
@@ -781,6 +796,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
       return s;
     }));
+
+    fetch(`/api/students/${studentId}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(updatedHold)
+    }).catch(err => console.warn('Failed to persist hold update on server:', err));
+
     logAudit('Hold Modified', `${holdType.toUpperCase()} Hold set to ${value ? 'ACTIVE' : 'CLEARED'} for student ${studentId}.`, 'Warning');
   };
 
@@ -852,6 +874,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // 11. Admissions Pipeline Management
   const updateApplicationStatus = (appId: string, status: Application['status'], notes?: string) => {
     setApplications(prev => prev.map(app => app.id === appId ? { ...app, status, reviewerNotes: notes ?? app.reviewerNotes } : app));
+
+    fetch(`/api/applications/${appId}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ status, reviewerNotes: notes })
+    }).catch(err => console.warn('Failed to persist application status on server:', err));
+
     logAudit('Admissions Pipeline', `Application ID ${appId} status set to "${status}".`, 'Info');
   };
 
@@ -870,6 +899,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // 12. Course Editing & Deletion
   const updateCourse = (courseId: string, data: Partial<Course>) => {
     setCourses(prev => prev.map(c => c.id === courseId ? { ...c, ...data } : c));
+
+    fetch(`/api/courses/${courseId}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data)
+    }).catch(err => console.warn('Failed to persist course update on server:', err));
+
     logAudit('Registrar Curriculum', `Updated course details for ${courseId}.`, 'Info');
   };
 
@@ -889,6 +925,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       status: 'Unpaid'
     };
     setInvoices(prev => [newInv, ...prev]);
+
+    fetch('/api/invoices', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(newInv)
+    }).catch(err => console.warn('Failed to persist invoice on server:', err));
+
     logAudit('Finance Bursar', `Generated fee invoice ${newInv.invoiceNumber} for $${newInv.totalAmount} issued to student ID ${newInv.studentId}.`, 'Info');
   };
 
@@ -991,6 +1034,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const updateStudentProfile = (studentId: string, data: Partial<Student>) => {
     setStudents(prev => prev.map(s => s.id === studentId ? { ...s, ...data } : s));
+
+    fetch(`/api/students/${studentId}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data)
+    }).catch(err => console.warn('Failed to persist student profile update on server:', err));
+
     logAudit('Student Self-Service', `Updated profile record for student ID ${studentId}.`, 'Info');
   };
 

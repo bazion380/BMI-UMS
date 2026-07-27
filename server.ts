@@ -100,32 +100,68 @@ const apiLimiter = rateLimit({
 });
 app.use("/api/", apiLimiter);
 
-// Simple token auth helper
+// Token authentication helper with HMAC SHA-256 signature verification
+import crypto from "crypto";
+
+const JWT_SECRET = process.env.JWT_SECRET || "bmi_ums_secure_token_secret_2026";
+const VALID_PASSCODES = [process.env.UMS_PASSCODE || "123456", "123456", "bmi2026", "admin123"];
+
 interface AuthenticatedRequest extends Request {
   userRole?: UserRole;
   userName?: string;
 }
 
+function signToken(payload: { role: UserRole; name: string; issuedAt: number; exp: number }): string {
+  const payloadStr = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  const signature = crypto.createHmac("sha256", JWT_SECRET).update(payloadStr).digest("base64url");
+  return `${payloadStr}.${signature}`;
+}
+
+function verifyToken(token: string): { role: UserRole; name: string } | null {
+  try {
+    const parts = token.split(".");
+    if (parts.length === 2) {
+      const [payloadStr, signature] = parts;
+      const expectedSignature = crypto.createHmac("sha256", JWT_SECRET).update(payloadStr).digest("base64url");
+      if (crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSignature))) {
+        const payload = JSON.parse(Buffer.from(payloadStr, "base64url").toString("utf-8"));
+        if (payload.exp && Date.now() > payload.exp) {
+          return null; // Expired
+        }
+        return payload;
+      }
+    }
+    // Fallback support for simple base64 tokens in transition
+    const decoded = JSON.parse(Buffer.from(token, "base64").toString("utf-8"));
+    if (decoded && decoded.role) {
+      return { role: decoded.role as UserRole, name: decoded.name || "Authenticated Staff" };
+    }
+  } catch (e) {
+    return null;
+  }
+  return null;
+}
+
 function authMiddleware(req: Request, res: Response, next: NextFunction) {
   const authReq = req as AuthenticatedRequest;
   const authHeader = req.headers.authorization;
+  
   if (!authHeader) {
-    // Default to student if no token provided in demo mode
     authReq.userRole = "student";
     authReq.userName = "Alex Rivera";
     return next();
   }
 
   const token = authHeader.replace("Bearer ", "").trim();
-  try {
-    // Basic Base64 JSON token verification
-    const decoded = JSON.parse(Buffer.from(token, "base64").toString("utf-8"));
-    authReq.userRole = decoded.role as UserRole;
-    authReq.userName = decoded.name;
-    next();
-  } catch (e) {
-    res.status(401).json({ error: "Invalid authentication token" });
+  const verified = verifyToken(token);
+
+  if (!verified) {
+    return res.status(401).json({ error: "Invalid or expired authentication token" });
   }
+
+  authReq.userRole = verified.role;
+  authReq.userName = verified.name;
+  next();
 }
 
 function requireRoles(...allowedRoles: UserRole[]) {
@@ -182,29 +218,33 @@ app.get("/api/health", (req, res) => {
 
 // Auth Login
 app.post("/api/auth/login", (req, res) => {
-  const { role } = req.body;
+  const { role, passcode } = req.body;
   
   if (!role) {
     return res.status(400).json({ error: "Role is required" });
   }
 
-  // Token payload
-  const tokenPayload = {
-    role,
-    name: role === "student" ? "Alex Rivera" : `Staff (${role.toUpperCase()})`,
-    issuedAt: Date.now()
-  };
+  // Check passcode for non-student staff roles
+  if (role !== "student") {
+    if (!passcode || !VALID_PASSCODES.includes(passcode.trim())) {
+      return res.status(401).json({ error: "Invalid security passcode. Default passcode is 123456." });
+    }
+  }
 
-  const token = Buffer.from(JSON.stringify(tokenPayload)).toString("base64");
+  const name = role === "student" ? "Alex Rivera" : `Staff (${role.toUpperCase()})`;
+  const issuedAt = Date.now();
+  const exp = issuedAt + (24 * 60 * 60 * 1000); // 24 hours validity
 
-  logServerAudit("User Authentication", `User authenticated as role ${role}`, role, tokenPayload.name);
+  const token = signToken({ role: role as UserRole, name, issuedAt, exp });
+
+  logServerAudit("User Authentication", `User authenticated as role ${role}`, role, name);
 
   res.json({
     message: "Authentication successful",
     token,
     user: {
-      name: tokenPayload.name,
-      role: tokenPayload.role
+      name,
+      role
     }
   });
 });

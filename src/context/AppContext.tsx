@@ -221,6 +221,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     localStorage.setItem(STORAGE_KEY_PREFIX + 'students', JSON.stringify(students));
   }, [students]);
 
+  // Initial backend API synchronization
+  useEffect(() => {
+    async function syncWithServerAPI() {
+      try {
+        const [stdRes, appRes, logRes] = await Promise.all([
+          fetch('/api/students').then(r => r.ok ? r.json() : null),
+          fetch('/api/applications').then(r => r.ok ? r.json() : null),
+          fetch('/api/audit-logs').then(r => r.ok ? r.json() : null),
+        ]);
+
+        if (stdRes && Array.isArray(stdRes) && stdRes.length > 0) {
+          setStudents(stdRes.map(sanitizeStudentRecord));
+        }
+        if (appRes && Array.isArray(appRes) && appRes.length > 0) {
+          setApplications(appRes);
+        }
+        if (logRes && Array.isArray(logRes) && logRes.length > 0) {
+          setAuditLogs(logRes);
+        }
+      } catch (err) {
+        console.warn('Backend API server not reached, using persistent cached state:', err);
+      }
+    }
+    syncWithServerAPI();
+  }, []);
+
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY_PREFIX + 'applications', JSON.stringify(applications));
   }, [applications]);

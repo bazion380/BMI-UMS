@@ -8,3 +8,9 @@ coverage/
 !.env.example
 
 /src/generated/prisma
+
+.agents/
+.claude/
+.windsurf/
+doRefactor.cjs
+refactor.js
